@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>mochimap</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<style type="text/css">
+html {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+}
+body {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+canvas {
+    margin: 0;
+    background-color: black;
+}
+span.sign {
+    position: absolute;
+    white-space: pre;
+    text-shadow:
+        1px 1px 1px #FFF,
+        -1px 1px 1px #FFF,
+        1px -1px 1px #FFF,
+        -1px -1px 1px #FFF;
+    pointer-events: none;
+}
+</style>
+</head>
+<body>
+    <canvas id="mainmap" width="1200" height="800"></canvas>
+</body>
+<script type="text/javascript">
+(function(){
+    var zoom = 0;
+    var tileSize = 512;
+    var canvas = document.getElementById("mainmap");
+    var canvasWidth = canvas.width = document.body.clientWidth - 2;
+    var canvasHeight = canvas.height = document.body.clientHeight - 2;
+    var context = canvas.getContext("2d");
+    var prevX = prevY = 0;
+    var pinchDistance = pinchStartDistance = 0;
+    
+    var eventStart = ("ontouchstart" in window) ? "touchstart" : "mousedown";
+    var eventEnd = ("ontouchend" in window) ? "touchend" : "mouseup";
+    var eventMove = ("ontouchmove" in window) ? "touchmove" : "mousemove";
+    
+    var signs = [];
+    fetch("https://sheets.googleapis.com/v4/spreadsheets/1HQDW4PS8_bUOXzMS4sP8eMIi4DOoB2jyE_BhJdI6gEQ/values/A2:C1000?key=AIzaSyCcB76lmXuniVlzJM810ankX2VBizashC0")
+    .then(function(res){
+        return res.json();
+    })
+    .then(function(json){
+        json.values.forEach(function(ary, n){
+            signs.push({
+                name: ary[0],
+                x: ary[1],
+                y: ary[2]
+            });
+            var ele = document.createElement("span");
+            ele.className = "sign";
+            ele.setAttribute("id", "sign-" + n);
+            ele.textContent = ary[0];
+            document.body.appendChild(ele);
+        });
+        draw();
+    });
+
+    var loadImage = function(filename){
+        var img = new Image();
+        img.src = filename;
+        return img;
+    };
+    var drawImage = function(filename, context, x, y, w, h){
+        var img = new Image();
+        img.src = filename;
+        img.onload = function(){
+            context.clearRect(x, y, w, h);
+            context.drawImage(img, x, y, w, h);
+        };
+        img.onerror = function(){
+            context.clearRect(x, y, w, h);
+        };
+    };
+    
+    var offsetX = offsetY = 0;
+    var scrollFlag = false;
+    
+    var draw = function(){
+        //context.clearRect(0, 0, canvasWidth, canvasHeight);
+
+        var ix = Math.floor(-offsetX / tileSize);
+        var iy = Math.floor(-offsetY / tileSize);
+        var bx = offsetX % tileSize;
+        if (bx > 0) {
+            bx -= tileSize;
+        }
+        var by = offsetY % tileSize;
+        if (by > 0) {
+            by -= tileSize;
+        }
+
+        var xnum = Math.ceil(canvasWidth / tileSize);
+        var ynum = Math.ceil(canvasHeight / tileSize);
+        for (var j = 0; j <= ynum; ++j) {
+            for (var i = 0; i <= xnum; ++i) {
+                var fname = "tile." + (ix + i) + "." + (iy + j) + ".png";
+                //context.drawImage(loadImage(fname), bx + tileSize * i, by + tileSize * j, tileSize, tileSize);
+                drawImage(fname, context, bx + tileSize * i, by + tileSize * j, tileSize, tileSize);
+            }
+        }
+        if (signs) {
+            var by = Math.pow(1.1, zoom);
+            signs.forEach(function(obj, n){
+                var ele = document.getElementById("sign-" + n);
+                ele.style.left = (offsetX + obj.x * by) + "px";
+                ele.style.top = (offsetY + obj.y * by) + "px";
+            });
+        }
+    };
+    
+    canvas.addEventListener(eventMove, function(){
+        event.preventDefault();
+        if (scrollFlag) {
+            var cx = event.touches ? event.touches[0].clientX : event.clientX;
+            var cy = event.touches ? event.touches[0].clientY : event.clientY;
+            offsetX += cx - prevX;
+            offsetY += cy - prevY;
+            prevX = cx;
+            prevY = cy;
+            draw();
+        }
+        if (pinchStartDistance > 0 && event.touches && event.touches.length > 1) {
+            distance = Math.sqrt(
+                Math.pow(event.touches[1].clientX - event.touches[0].clientX, 2) +
+                Math.pow(event.touches[1].clientY - event.touches[0].clientY, 2)
+            );
+            if (Math.abs(pinchDistance - distance) > 10) {
+                zooming(distance > pinchDistance,
+                        (event.touches[1].clientX + event.touches[0].clientX) / 2,
+                        (event.touches[1].clientY + event.touches[0].clientY) / 2
+                );
+                pinchDistance = distance;
+            }
+        }
+    });
+    canvas.addEventListener(eventEnd, function(){
+        event.preventDefault();
+        scrollFlag = false;
+
+        if (pinchStartDistance > 0) {
+            pinchStartDistance = 0;
+        }
+    });
+    canvas.addEventListener(eventStart, function(event){
+        event.preventDefault();
+        scrollFlag = true;
+        prevX = event.touches ? event.touches[0].clientX : event.clientX;
+        prevY = event.touches ? event.touches[0].clientY : event.clientY;
+
+        pinchStartDistance = 0;
+        if (event.touches && event.touches.length > 1) {
+            pinchStartDistance = Math.sqrt(
+                Math.pow(event.touches[1].clientX - event.touches[0].clientX, 2) +
+                Math.pow(event.touches[1].clientY - event.touches[0].clientY, 2)
+            );
+        }
+    });
+    canvas.addEventListener("wheel", function(event){
+        event.preventDefault();
+        zooming(event.wheelDelta > 0, event.clientX, event.clientY);
+    });
+    canvas.addEventListener("dblclick", function(event){
+        if (event.button == 0) {
+            zooming(true, event.clientX, event.clientY, 5);
+        } else if (event.button == 1) {
+            var by = Math.pow(1.1, zoom);
+            var x = (event.clientX - offsetX) / by;
+            var y = (event.clientY - offsetY) / by;
+            window.alert(x + "," + y);
+        }
+    });
+
+    var zooming = function(zoomin, baseX, baseY, step){
+        baseX = baseX || 0;
+        baseY = baseY || 0;
+        step = step || 1;
+        var by = Math.pow(1.1, zoom);
+        var x = (baseX - offsetX) / by;
+        var y = (baseY - offsetY) / by;
+        if (zoomin) {
+            zoom += step;
+        } else {
+            zoom -= step;
+        }
+        tileSize = 512 * Math.pow(1.1, zoom);
+        by = Math.pow(1.1, zoom);
+        offsetX = baseX - x * by;
+        offsetY = baseY - y * by;
+        context.clearRect(0, 0, canvasWidth, canvasHeight);
+        draw();
+    };
+    
+    window.addEventListener("resize", function(event){
+        canvasWidth = canvas.width = document.body.clientWidth - 2;
+        canvasHeight = canvas.height = document.body.clientHeight - 2;
+        context.clearRect(0, 0, canvasWidth, canvasHeight);
+        draw();
+    });
+
+    draw();
+})();
+</script>
+</html>
