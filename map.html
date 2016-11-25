@@ -228,6 +228,8 @@ span.sign {
             event.preventDefault();
             if (event.type === "wheel") {
                 newevent = new WheelEvent(event.type, event);
+            } else if (event.type.startsWith("touch")) {
+                newevent = new TouchEvent(event.type, event);
             } else {
                 newevent = new MouseEvent(event.type, event);
             }
