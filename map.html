@@ -28,7 +28,11 @@ span.sign {
         -1px 1px 1px #FFF,
         1px -1px 1px #FFF,
         -1px -1px 1px #FFF;
-    pointer-events: none;
+    user-select: none;
+    -moz-user-select: none;
+    -webkit-user-select: none;
+    -ms-user-select: none;
+    cursor: default;
 }
 </style>
 </head>
@@ -51,7 +55,7 @@ span.sign {
     var eventMove = ("ontouchmove" in window) ? "touchmove" : "mousemove";
     
     var signs = [];
-    fetch("https://sheets.googleapis.com/v4/spreadsheets/1HQDW4PS8_bUOXzMS4sP8eMIi4DOoB2jyE_BhJdI6gEQ/values/THE_END!A2:C1000?key=AIzaSyCcB76lmXuniVlzJM810ankX2VBizashC0")
+    fetch("https://sheets.googleapis.com/v4/spreadsheets/1HQDW4PS8_bUOXzMS4sP8eMIi4DOoB2jyE_BhJdI6gEQ/values/THE_END!A2:D1000?key=AIzaSyCcB76lmXuniVlzJM810ankX2VBizashC0")
     .then(function(res){
         return res.json();
     })
@@ -60,7 +64,8 @@ span.sign {
             signs.push({
                 name: ary[0],
                 x: ary[1],
-                y: ary[2]
+                y: ary[2],
+                memo: ary[3] || ""
             });
             var ele = document.createElement("span");
             ele.className = "sign";
@@ -120,6 +125,9 @@ span.sign {
                 var ele = document.getElementById("sign-" + n);
                 ele.style.left = (offsetX + obj.x * by) + "px";
                 ele.style.top = (offsetY + obj.y * by) + "px";
+                if (obj.memo) {
+                    ele.title = obj.memo;
+                }
             });
         }
     };
@@ -212,6 +220,25 @@ span.sign {
         context.clearRect(0, 0, canvasWidth, canvasHeight);
         draw();
     });
+
+    var signCallback = function(event){
+        var ele = event.target;
+        var newevent;
+        if (ele.tagName.toUpperCase() === "SPAN" && ele.classList.contains("sign")) {
+            event.preventDefault();
+            if (event.type === "wheel") {
+                newevent = new WheelEvent(event.type, event);
+            } else {
+                newevent = new MouseEvent(event.type, event);
+            }
+            canvas.dispatchEvent(newevent);
+        }
+    };
+    document.addEventListener(eventStart, signCallback);
+    document.addEventListener(eventMove, signCallback);
+    document.addEventListener(eventEnd, signCallback);
+    document.addEventListener("wheel", signCallback);
+    document.addEventListener("dblclick", signCallback);
 
     draw();
 })();
